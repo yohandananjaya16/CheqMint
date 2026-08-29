@@ -1,0 +1,2 @@
+"""LedgerDesk application package."""
+
