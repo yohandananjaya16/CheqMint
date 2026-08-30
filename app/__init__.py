@@ -1,2 +1,2 @@
-"""LedgerDesk application package."""
+"""CheqMint application package."""
 
