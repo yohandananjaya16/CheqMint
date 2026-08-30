@@ -21,14 +21,15 @@ class AppConfig:
     github_repository: str
     update_check_enabled: bool
     copyright: str
+    data_storage_path: str
 
     @property
     def data_dir(self) -> Path:
-        override = os.getenv("LEDGERDESK_DATA_DIR")
+        override = os.getenv("CHEQMINT_DATA_DIR") or os.getenv("LEDGERDESK_DATA_DIR")
         if override:
             return Path(override).expanduser().resolve()
         base = Path(os.getenv("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-        return base / self.company_name / self.application_name
+        return base / Path(self.data_storage_path)
 
     @property
     def logs_dir(self) -> Path:
