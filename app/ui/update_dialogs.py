@@ -65,7 +65,7 @@ class DownloadDialog(QDialog):
         self.setMinimumWidth(480)
         self.setModal(True)
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel(f"<h2>Downloading LedgerDesk {info.version}</h2>"))
+        layout.addWidget(QLabel(f"<h2>Downloading CheqMint {info.version}</h2>"))
         self.bar = QProgressBar()
         layout.addWidget(self.bar)
         self.detail = QLabel("Preparing download…")
