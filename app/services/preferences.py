@@ -7,7 +7,7 @@ from pathlib import Path
 class Preferences:
     def __init__(self, path: Path, default_auto_update: bool = True) -> None:
         self.path = path
-        self.values = {"automatic_update_check": default_auto_update, "last_installed_version": ""}
+        self.values = {"automatic_update_check": default_auto_update, "last_installed_version": "", "supplier_auto_suggest": True, "dark_mode": False, "google_drive_backup": False, "google_drive_folder": ""}
         try:
             self.values.update(json.loads(path.read_text(encoding="utf-8")))
         except (FileNotFoundError, json.JSONDecodeError, OSError):
