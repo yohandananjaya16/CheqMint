@@ -1,5 +1,5 @@
-#define MyAppName "LedgerDesk"
-#define MyAppPublisher "Your Company"
+#define MyAppName "CheqMint"
+#define MyAppPublisher "Yohan Dananjaya"
 #ifndef MyAppVersion
   #define MyAppVersion "1.0.0"
 #endif
@@ -13,7 +13,7 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-AppPublisherURL=https://github.com/yohandananjaya16/LedgerDesk
+AppPublisherURL=https://github.com/yohandananjaya16
 DefaultDirName={localappdata}\Programs\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
@@ -40,7 +40,10 @@ ChangesAssociations=no
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: checkedonce
 
 [Files]
-Source: "{#SourceRoot}\dist\LedgerDesk\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#SourceRoot}\dist\CheqMint\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[InstallDelete]
+Type: files; Name: "{app}\LedgerDesk.exe"
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppName}.exe"; WorkingDir: "{app}"
@@ -64,7 +67,7 @@ var
   ResultCode: Integer;
 begin
   if CurUninstallStep = usPostUninstall then
-    if MsgBox('Remove LedgerDesk settings, logs, and user data?', mbConfirmation, MB_YESNO) = IDYES then
-      DelTree(ExpandConstant('{localappdata}\{#MyAppPublisher}\{#MyAppName}'), True, True, True);
+    if MsgBox('Remove CheqMint settings, logs, and user data?', mbConfirmation, MB_YESNO) = IDYES then
+      DelTree(ExpandConstant('{localappdata}\Your Company\LedgerDesk'), True, True, True);
 end;
 
