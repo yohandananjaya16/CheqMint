@@ -26,7 +26,7 @@ def version() -> str:
 
 def write_version_info(value: str) -> None:
     numbers = tuple(map(int, value.split("."))) + (0,)
-    content = f"""VSVersionInfo(ffi=FixedFileInfo(filevers={numbers}, prodvers={numbers}, mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)), kids=[StringFileInfo([StringTable('040904B0', [StringStruct('CompanyName', 'Your Company'), StringStruct('FileDescription', 'LedgerDesk'), StringStruct('FileVersion', '{value}'), StringStruct('InternalName', 'LedgerDesk'), StringStruct('OriginalFilename', 'LedgerDesk.exe'), StringStruct('ProductName', 'LedgerDesk'), StringStruct('ProductVersion', '{value}')])]), VarFileInfo([VarStruct('Translation', [1033, 1200])])])"""
+    content = f"""VSVersionInfo(ffi=FixedFileInfo(filevers={numbers}, prodvers={numbers}, mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)), kids=[StringFileInfo([StringTable('040904B0', [StringStruct('CompanyName', 'Yohan Dananjaya'), StringStruct('FileDescription', 'CheqMint'), StringStruct('FileVersion', '{value}'), StringStruct('InternalName', 'CheqMint'), StringStruct('OriginalFilename', 'CheqMint.exe'), StringStruct('ProductName', 'CheqMint'), StringStruct('ProductVersion', '{value}')])]), VarFileInfo([VarStruct('Translation', [1033, 1200])])])"""
     (ROOT / "installer" / "version_info.txt").write_text(content, encoding="utf-8")
 
 
@@ -50,11 +50,11 @@ def main() -> int:
     run(sys.executable, "-m", "PyInstaller", "--noconfirm", "LedgerDesk.spec")
     iscc = find_iscc()
     run(str(iscc), f"/DMyAppVersion={value}", f"/DSourceRoot={ROOT}", str(ROOT / "installer" / "LedgerDesk.iss"))
-    installer = ROOT / "release" / f"LedgerDesk-Setup-{value}.exe"
+    installer = ROOT / "release" / f"CheqMint-Setup-{value}.exe"
     digest = hashlib.sha256(installer.read_bytes()).hexdigest()
     checksum = installer.with_suffix(installer.suffix + ".sha256")
     checksum.write_text(f"{digest}  {installer.name}\n", encoding="ascii")
-    print(f"\nApplication: {ROOT / 'dist' / 'LedgerDesk'}\nInstaller:   {installer}\nChecksum:    {checksum}")
+    print(f"\nApplication: {ROOT / 'dist' / 'CheqMint'}\nInstaller:   {installer}\nChecksum:    {checksum}")
     return 0
 
 
