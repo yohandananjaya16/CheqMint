@@ -46,7 +46,7 @@ class UpdateClient:
         return cls._version(candidate) > cls._version(current)
 
     def _request(self, url: str):
-        request = Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "LedgerDesk-Updater"})
+        request = Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "CheqMint-Updater"})
         return urlopen(request, timeout=self.timeout)
 
     def check(self, current_version: str) -> UpdateInfo | None:
