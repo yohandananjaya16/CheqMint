@@ -1,6 +1,10 @@
-# LedgerDesk
+# CheqMint
 
-LedgerDesk is a production-oriented Windows 10/11 (64-bit) PySide6 desktop application foundation. It builds as a windowed, self-contained PyInstaller folder and installs per user with Inno Setup. Customers do not need Python, Git, a terminal, or administrator privileges.
+CheqMint is a Windows 10/11 cheque printing and management application created by Yohan Dananjaya. It builds as a windowed, self-contained PyInstaller folder and installs per user with Inno Setup.
+
+## Cheque printing
+
+The Cheque Printing page supports any bank through editable templates. Enter payee, date, and amount; CheqMint generates the amount in English words. Always calibrate with plain paper before printing a real cheque.
 
 ## Configure before release
 
@@ -8,8 +12,8 @@ Edit `config.json` and replace `YOUR_ORG`, `Your Company`, URLs, and copyright v
 
 The update client only accepts HTTPS release assets from GitHub and requires two assets in each release:
 
-- `LedgerDesk-Setup-X.Y.Z.exe`
-- `LedgerDesk-Setup-X.Y.Z.exe.sha256`
+- `CheqMint-Setup-X.Y.Z.exe`
+- `CheqMint-Setup-X.Y.Z.exe.sha256`
 
 The application reads the latest public GitHub Release, compares semantic versions, downloads in a background thread, validates size and SHA-256, launches the signed/verified installer outside the running process, then exits. Inno Setup upgrades the existing per-user installation and starts the new application. User data lives under `%LOCALAPPDATA%\Your Company\LedgerDesk` and is never part of the installation directory.
 
