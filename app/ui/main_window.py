@@ -168,6 +168,7 @@ class MainWindow(QMainWindow):
         box.addWidget(self.theme_label)
         dark = QCheckBox("Switch between Light Mode and Dark Mode", objectName="themeSwitch"); dark.setChecked(self.preferences.get_bool("dark_mode")); dark.toggled.connect(self.set_dark_mode); box.addWidget(dark)
         suggest=QCheckBox("Supplier name auto-suggestions");suggest.setChecked(self.preferences.get_bool("supplier_auto_suggest"));suggest.toggled.connect(self.set_supplier_suggestions);box.addWidget(suggest)
+        quick=QCheckBox("Quick Print — print without a cheque number");quick.setChecked(self.preferences.get_bool("quick_print_without_cheque_number"));quick.toggled.connect(self.set_quick_print);box.addWidget(quick)
         box.addSpacing(12);box.addWidget(QLabel("Google Drive Backup",objectName="sectionTitle"));self.drive_label=QLabel(str(self.preferences.values.get("google_drive_folder", "No folder selected")),objectName="muted");self.drive_label.setWordWrap(True);box.addWidget(self.drive_label)
         choose_drive=QPushButton("Choose Google Drive Folder",objectName="secondary");choose_drive.clicked.connect(self.choose_drive_folder);box.addWidget(choose_drive)
         drive_sync=QCheckBox("Copy automatic backups to this folder");drive_sync.setChecked(self.preferences.get_bool("google_drive_backup"));drive_sync.toggled.connect(lambda value:self.preferences.set("google_drive_backup",value));box.addWidget(drive_sync)
@@ -181,6 +182,9 @@ class MainWindow(QMainWindow):
 
     def set_supplier_suggestions(self,enabled:bool)->None:
         self.preferences.set("supplier_auto_suggest",enabled);self.cheque_page.refresh_supplier_suggestions()
+
+    def set_quick_print(self,enabled:bool)->None:
+        self.preferences.set("quick_print_without_cheque_number",enabled);self.cheque_page.refresh_quick_print_mode()
 
     def choose_drive_folder(self)->None:
         folder=QFileDialog.getExistingDirectory(self,"Choose your Google Drive folder",str(Path.home()))
