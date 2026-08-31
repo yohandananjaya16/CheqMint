@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from copy import deepcopy
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QAbstractItemView,QFrame,QHeaderView,QHBoxLayout,QLabel,QListWidget,QMessageBox,
                                QPushButton,QTableWidget,QTableWidgetItem,QVBoxLayout,QWidget)
@@ -17,8 +19,8 @@ class BankManagementPage(QWidget):
         subtitle = QLabel("Add each bank once, then calibrate its cheque size and print positions in millimetres.", objectName="muted"); subtitle.setWordWrap(True); layout.addWidget(subtitle)
         card = QFrame(objectName="card"); box = QVBoxLayout(card); box.setContentsMargins(22, 20, 22, 20)
         self.items = QListWidget(); self.items.itemDoubleClicked.connect(lambda _: self.edit_bank()); box.addWidget(self.items)
-        actions = QHBoxLayout(); add = QPushButton("Add Bank"); add.clicked.connect(self.add_bank); edit = QPushButton("Edit Format", objectName="secondary"); edit.clicked.connect(self.edit_bank); delete = QPushButton("Delete Bank", objectName="danger"); delete.clicked.connect(self.delete_bank)
-        actions.addWidget(add); actions.addWidget(edit); actions.addWidget(delete); box.addLayout(actions); layout.addWidget(card, 1); self.reload()
+        actions = QHBoxLayout(); add = QPushButton("Add Bank"); add.clicked.connect(self.add_bank); copy = QPushButton("Copy Template", objectName="secondary"); copy.clicked.connect(self.copy_bank); edit = QPushButton("Edit Format", objectName="secondary"); edit.clicked.connect(self.edit_bank); delete = QPushButton("Delete Bank", objectName="danger"); delete.clicked.connect(self.delete_bank)
+        actions.addWidget(add); actions.addWidget(copy); actions.addWidget(edit); actions.addWidget(delete); box.addLayout(actions); layout.addWidget(card, 1); self.reload()
 
     def reload(self, selected: str = "") -> None:
         self.items.clear()
@@ -27,7 +29,7 @@ class BankManagementPage(QWidget):
         if matches: self.items.setCurrentItem(matches[0])
 
     def add_bank(self) -> None:
-        dialog = TemplateDialog(ChequeTemplate.default("New Bank"), self)
+        dialog = TemplateDialog(self.store.commercial_base("New Bank"), self)
         if not dialog.exec(): return
         result = dialog.result_template()
         if not result.name: QMessageBox.warning(self, "Bank", "Enter the bank name."); return
@@ -42,6 +44,17 @@ class BankManagementPage(QWidget):
         result = dialog.result_template()
         if not result.name: QMessageBox.warning(self, "Bank", "Enter the bank name."); return
         self.store.rename_save(original.name, result); self.reload(result.name); self.changed()
+
+    def copy_bank(self) -> None:
+        item = self.items.currentItem()
+        if not item: QMessageBox.information(self, "Copy Template", "Select a bank template to copy."); return
+        template = deepcopy(item.data(Qt.UserRole)); template.name = f"{template.name} Copy"
+        dialog = TemplateDialog(template, self)
+        if not dialog.exec(): return
+        result = dialog.result_template()
+        if not result.name: QMessageBox.warning(self, "Bank", "Enter the new bank name."); return
+        if any(existing.name.casefold() == result.name.casefold() for existing in self.store.list()): QMessageBox.warning(self, "Bank", "A bank with this name already exists."); return
+        self.store.save(result); self.reload(result.name); self.changed()
 
     def delete_bank(self) -> None:
         item = self.items.currentItem()
