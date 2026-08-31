@@ -42,6 +42,34 @@ class ChequeTests(unittest.TestCase):
     def test_boxed_date_has_eight_spaced_digits(self) -> None:
         self.assertEqual(format_cheque_date(QDate(2026, 8, 29), "boxed"), "2  9  0  8  2  0  2  6")
 
+    def test_template_feed_rotation_is_persisted(self) -> None:
+        with TemporaryDirectory() as directory:
+            store = TemplateStore(Path(directory))
+            template = ChequeTemplate.default("Long Edge Feed")
+            template.rotation_degrees = 90
+            template.date_digit_spacing_mm = 5.5
+            template.omit_year_century = True
+            store.save(template)
+            loaded = {item.name: item for item in store.list()}["Long Edge Feed"]
+            self.assertEqual(loaded.rotation_degrees, 90)
+            self.assertEqual(loaded.date_digit_spacing_mm, 5.5)
+            self.assertTrue(loaded.omit_year_century)
+
+    def test_canon_lbp6030_180x90_preset_is_available(self) -> None:
+        with TemporaryDirectory() as directory:
+            store = TemplateStore(Path(directory))
+            preset = {item.name: item for item in store.list()}["Canon LBP6030 - 180x90 mm Cheque"]
+            self.assertEqual((preset.width_mm, preset.height_mm, preset.rotation_degrees), (180.0, 90.0, 90))
+
+    def test_commercial_positions_are_applied_to_all_templates_once(self) -> None:
+        with TemporaryDirectory() as directory:
+            store = TemplateStore(Path(directory))
+            templates = store.list(); commercial = next(item for item in templates if item.name == "Commercial Bank - Standard")
+            for template in templates:
+                self.assertEqual(template.fields, commercial.fields)
+                self.assertTrue(template.omit_year_century)
+            self.assertEqual(store.commercial_base("Another Bank").fields, commercial.fields)
+
     def test_cheque_canvas_can_render_a_pdf_print_job(self) -> None:
         app = QApplication.instance() or QApplication([])
         with TemporaryDirectory() as directory:
@@ -50,7 +78,7 @@ class ChequeTests(unittest.TestCase):
             printer.setOutputFormat(QPrinter.PdfFormat)
             printer.setOutputFileName(str(target))
             canvas = ChequeCanvas()
-            canvas.set_content(ChequeTemplate.default(), {"payee": "Test Payee", "amount": "1,250.00"})
+            canvas.set_content(ChequeTemplate.default(), {"payee": "Test Payee", "amount": "1,250.00", "account_payee": "CROSSED"})
             self.assertTrue(canvas.print_to(printer))
             self.assertGreater(target.stat().st_size, 100)
         self.assertIsNotNone(app)
@@ -97,7 +125,7 @@ class ChequeTests(unittest.TestCase):
 
     def test_supplier_suggestions_default_and_cash_payment_export(self) -> None:
         with TemporaryDirectory() as directory:
-            root=Path(directory);self.assertTrue(Preferences(root/"settings.json").get_bool("supplier_auto_suggest"))
+            root=Path(directory);prefs=Preferences(root/"settings.json");self.assertTrue(prefs.get_bool("supplier_auto_suggest"));self.assertFalse(prefs.get_bool("quick_print_without_cheque_number"))
             history=PrintHistoryStore(root/"history.json");history.record("Bank","CASH",500,"2026-08-30",printed_by="Nimal",payment_type="Cash / Bearer");target=root/"cash.csv";history.export_day_csv(target,date.today());content=target.read_text(encoding="utf-8-sig");self.assertIn("Cash / Bearer",content);self.assertIn("Printed By",content)
 
 
