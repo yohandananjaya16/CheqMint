@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import date
 
-from PySide6.QtCore import QDate, QMarginsF, QRectF, QSizeF, Qt
+from PySide6.QtCore import QDate, QLineF, QMarginsF, QRectF, QSizeF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPageLayout, QPageSize, QPen
 from PySide6.QtPrintSupport import QPrintDialog, QPrintPreviewDialog, QPrinter
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QCompleter, QDateEdit, QDialog, QDialogButtonBox,
@@ -23,7 +23,7 @@ from app.services.preferences import Preferences
 LOGGER = logging.getLogger(__name__)
 FIELD_LABELS = {"date": "Date", "payee": "Payee", "amount_words_1": "Amount words line 1",
                 "amount_words_2": "Amount words line 2", "amount": "Numeric amount",
-                "account_payee": "A/C Payee marking"}
+                "account_payee": "Crossed cheque lines"}
 
 
 def format_cheque_date(value: QDate, style: str) -> str:
@@ -68,6 +68,16 @@ class ChequeCanvas(QWidget):
             font.setWeight(QFont.Medium)
             painter.setFont(font)
             painter.setPen(QColor("#101828"))
+            if key == "date" and self.template.date_style == "boxed":
+                self._draw_boxed_date(painter, rect, font, font_pixels, scale, value, physical_print)
+                if show_guides:
+                    painter.setPen(QPen(QColor(21,169,161,90), 1, Qt.DashLine)); painter.drawRect(rect)
+                continue
+            if key == "account_payee":
+                if value: self._draw_account_payee_crossing(painter, rect, font, font_pixels, physical_print)
+                if show_guides:
+                    painter.setPen(QPen(QColor(21,169,161,90), 1, Qt.DashLine)); painter.drawRect(rect)
+                continue
             if physical_print:
                 # Convert text to vector outlines so every Windows printer/PDF driver renders it identically.
                 path = QPainterPath(); path.addText(rect.left(), rect.top() + font_pixels, font, value)
@@ -77,13 +87,52 @@ class ChequeCanvas(QWidget):
             if show_guides:
                 painter.setPen(QPen(QColor(21,169,161,90), 1, Qt.DashLine)); painter.drawRect(rect)
 
+    def _draw_boxed_date(self, painter: QPainter, rect: QRectF, font: QFont, font_pixels: int,
+                         scale: float, value: str, physical_print: bool) -> None:
+        digits = "".join(character for character in value if character.isdigit())
+        step = max(font_pixels * 0.65, self.template.date_digit_spacing_mm * scale)
+        for index, digit in enumerate(digits[:8]):
+            x = rect.left() + index * step
+            # Sri Lankan cheque stock already contains the century boxes; never overprint "20".
+            # Keep advancing x so both blank boxes retain their exact spacing.
+            if index in (4, 5):
+                continue
+            if physical_print:
+                path = QPainterPath(); path.addText(x, rect.top() + font_pixels, font, digit)
+                painter.fillPath(path, QColor("#101828"))
+            else:
+                painter.drawText(QRectF(x, rect.top(), step, font_pixels * 1.35), Qt.AlignLeft | Qt.AlignVCenter, digit)
+
+    @staticmethod
+    def _draw_account_payee_crossing(painter: QPainter, rect: QRectF, font: QFont,
+                                     font_pixels: int, physical_print: bool) -> None:
+        painter.save()
+        # Draw a compact crossed-account ribbon centred on the configured top-left field.
+        # Local coordinates keep both rules equal, parallel and evenly spaced.
+        painter.translate(rect.center()); painter.rotate(-24)
+        half_width = rect.width() / 2
+        rule_y = font_pixels * 0.82
+        pen = QPen(QColor("#101828"), max(1.0, font_pixels * 0.075)); pen.setCapStyle(Qt.RoundCap); painter.setPen(pen)
+        painter.drawLine(QLineF(-half_width, -rule_y, half_width, -rule_y))
+        painter.drawLine(QLineF(-half_width, rule_y, half_width, rule_y))
+        painter.restore()
+
     def print_to(self, printer: QPrinter) -> bool:
         painter = QPainter()
         if not painter.begin(printer):
             LOGGER.error("Printer painter could not be started")
             return False
         dpi = printer.resolution(); scale = dpi / 25.4
+        rotation = self.template.rotation_degrees % 360
+        painter.save()
+        if rotation == 90:
+            painter.translate(self.template.height_mm * scale, 0); painter.rotate(90)
+        elif rotation == 180:
+            painter.translate(self.template.width_mm * scale, self.template.height_mm * scale); painter.rotate(180)
+        elif rotation == 270:
+            painter.translate(0, self.template.width_mm * scale); painter.rotate(270)
         self._draw(painter, self.print_offset[0]*scale, self.print_offset[1]*scale, scale, show_guides=False, physical_print=True)
+        painter.restore()
         return painter.end()
 
 
@@ -94,7 +143,15 @@ class TemplateDialog(QDialog):
         self.name = QLineEdit(template.name); self.width = self._spin(template.width_mm, 100, 400); self.height = self._spin(template.height_mm, 50, 200)
         self.date_style = QComboBox(); self.date_style.addItem("Boxed digits (D D M M Y Y Y Y)", "boxed"); self.date_style.addItem("Slash date (DD/MM/YYYY)", "slash")
         self.date_style.setCurrentIndex(max(0, self.date_style.findData(template.date_style)))
-        form.addRow("Bank / template name", self.name); form.addRow("Cheque width (mm)", self.width); form.addRow("Cheque height (mm)", self.height); form.addRow("Printed date style", self.date_style); layout.addLayout(form)
+        self.rotation = QComboBox()
+        self.rotation.addItem("Normal — left edge enters first", 0)
+        self.rotation.addItem("Rotate 90° — long edge feed", 90)
+        self.rotation.addItem("Rotate 180° — right edge enters first", 180)
+        self.rotation.addItem("Rotate 270° — opposite long edge feed", 270)
+        self.rotation.setCurrentIndex(max(0, self.rotation.findData(template.rotation_degrees)))
+        self.date_spacing = self._spin(template.date_digit_spacing_mm, 1.0, 12.0); self.date_spacing.setSingleStep(0.5); self.date_spacing.setSuffix(" mm")
+        self.omit_century = QCheckBox("First two year boxes stay blank (20 is never printed)"); self.omit_century.setChecked(True); self.omit_century.setEnabled(False)
+        form.addRow("Bank / template name", self.name); form.addRow("Cheque width (mm)", self.width); form.addRow("Cheque height (mm)", self.height); form.addRow("Printed date style", self.date_style); form.addRow("Date digit spacing", self.date_spacing); form.addRow("Year boxes", self.omit_century); form.addRow("Printer feed direction", self.rotation); layout.addLayout(form)
         self.table = QTableWidget(len(template.fields), 5); self.table.setHorizontalHeaderLabels(("Field", "X mm", "Y mm", "Width mm", "Font pt")); self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         for row, (key, pos) in enumerate(template.fields.items()):
             item = QTableWidgetItem(FIELD_LABELS.get(key, key)); item.setData(Qt.UserRole, key); self.table.setItem(row, 0, item)
@@ -111,7 +168,7 @@ class TemplateDialog(QDialog):
         for row in range(self.table.rowCount()):
             key = self.table.item(row, 0).data(Qt.UserRole); values = [self.table.cellWidget(row, col).value() for col in range(1, 5)]
             fields[key] = FieldPosition(*values)
-        return ChequeTemplate(self.name.text().strip(), self.width.value(), self.height.value(), fields, self.date_style.currentData())
+        return ChequeTemplate(self.name.text().strip(), self.width.value(), self.height.value(), fields, self.date_style.currentData(), self.rotation.currentData(), self.date_spacing.value(), self.omit_century.isChecked())
 
 
 class SupplierDialog(QDialog):
@@ -159,7 +216,7 @@ class SupplierDialog(QDialog):
 
 class ChequePage(QWidget):
     def __init__(self, store: TemplateStore, supplier_store: SupplierStore, history: PrintHistoryStore, accounts: BankAccountStore, calibrations: CalibrationStore, profile:ProfileStore, preferences:Preferences, parent=None) -> None:
-        super().__init__(parent); self.store,self.supplier_store,self.history,self.accounts,self.calibrations,self.profile,self.preferences=store,supplier_store,history,accounts,calibrations,profile,preferences; self._build(); self.reload_templates(); self.reload_suppliers(); self.reload_accounts(); self.refresh_preview()
+        super().__init__(parent); self.store,self.supplier_store,self.history,self.accounts,self.calibrations,self.profile,self.preferences=store,supplier_store,history,accounts,calibrations,profile,preferences; self._build(); self.reload_templates(); self.reload_suppliers(); self.reload_accounts(); self.refresh_quick_print_mode(); self.refresh_preview()
 
     def _build(self) -> None:
         root_layout = QVBoxLayout(self); root_layout.setContentsMargins(0, 0, 0, 0)
@@ -176,13 +233,13 @@ class ChequePage(QWidget):
         form_box.addWidget(bank_group)
         details_group = QGroupBox("2. Cheque details"); form = QFormLayout(details_group); form.setSpacing(12); form.setRowWrapPolicy(QFormLayout.WrapLongRows)
         self.account=QComboBox();self.account.currentIndexChanged.connect(self.select_account);form.addRow("Bank account",self.account)
-        self.cheque_number=QLineEdit();form.addRow("Cheque number",self.cheque_number)
+        number_row=QHBoxLayout();self.cheque_number=QLineEdit();number_row.addWidget(self.cheque_number,1);self.quick_number=QCheckBox("No cheque number / Quick print");self.quick_number.toggled.connect(self.set_quick_number);number_row.addWidget(self.quick_number);form.addRow("Cheque number (optional)",number_row)
         self.suppliers = QComboBox(); self.suppliers.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon); self.suppliers.setMinimumContentsLength(18); self.suppliers.currentIndexChanged.connect(self.select_supplier); form.addRow("Saved supplier", self.suppliers)
         self.payee = QLineEdit(); self.payee.setMinimumWidth(0); self.payee.setPlaceholderText("Enter person or company name"); self.payee.setClearButtonEnabled(True); self.payee.textChanged.connect(self.refresh_preview); form.addRow("Payee name *", self.payee)
         payment=QHBoxLayout();self.ac_mode=QRadioButton("A/C Payee");self.cash_mode=QRadioButton("Cash / Bearer");self.ac_mode.setChecked(True);self.ac_mode.toggled.connect(self.set_payment_mode);payment.addWidget(self.ac_mode);payment.addWidget(self.cash_mode);form.addRow("Payment type",payment)
         self.date = QDateEdit(QDate.currentDate()); self.date.setDisplayFormat("dd / MM / yyyy"); self.date.setCalendarPopup(True); self.date.dateChanged.connect(self.refresh_preview); form.addRow("Cheque date *", self.date)
         self.amount = QDoubleSpinBox(); self.amount.setPrefix("Rs.  "); self.amount.setRange(0, 999_999_999.99); self.amount.setDecimals(2); self.amount.setGroupSeparatorShown(True); self.amount.valueChanged.connect(self.refresh_preview); form.addRow("Amount *", self.amount)
-        self.ac_payee = QCheckBox("Print A/C PAYEE ONLY marking"); self.ac_payee.setChecked(True); self.ac_payee.toggled.connect(self.refresh_preview); form.addRow("Security", self.ac_payee); form_box.addWidget(details_group)
+        self.ac_payee = QCheckBox("Cross cheque with two parallel lines"); self.ac_payee.setChecked(True); self.ac_payee.toggled.connect(self.refresh_preview); form.addRow("Security", self.ac_payee); form_box.addWidget(details_group)
         words_group = QGroupBox("Amount in words"); words_layout = QVBoxLayout(words_group); self.words_label = QLabel("Zero Rupees Only"); self.words_label.setWordWrap(True); self.words_label.setObjectName("amountWords"); words_layout.addWidget(self.words_label); form_box.addWidget(words_group)
         actions = QHBoxLayout(); preview = QPushButton("Print Preview"); preview.clicked.connect(self.print_preview); actions.addWidget(preview)
         print_button = QPushButton("Print Cheque"); print_button.setObjectName("primaryAction"); print_button.clicked.connect(self.print_cheque); actions.addWidget(print_button); form_box.addLayout(actions); form_box.addStretch()
@@ -221,7 +278,21 @@ class ChequePage(QWidget):
         self.account.setCurrentIndex(max(0,self.account.findText(selected)));self.account.blockSignals(False)
     def select_account(self,index):
         x=self.account.itemData(index)
-        if x:self.templates.setCurrentText(x.bank_template);self.cheque_number.setText(str(x.next_cheque_number))
+        if x:
+            self.templates.setCurrentText(x.bank_template)
+            if not self.preferences.get_bool("quick_print_without_cheque_number"): self.cheque_number.setText(str(x.next_cheque_number))
+
+    def refresh_quick_print_mode(self) -> None:
+        quick = self.preferences.get_bool("quick_print_without_cheque_number")
+        self.quick_number.blockSignals(True); self.quick_number.setChecked(quick); self.quick_number.blockSignals(False)
+        self.cheque_number.setEnabled(not quick)
+        self.cheque_number.setPlaceholderText("Disabled by Quick Print setting" if quick else "Enter cheque number")
+        if quick: self.cheque_number.clear()
+        elif self.account.currentData(): self.cheque_number.setText(str(self.account.currentData().next_cheque_number))
+
+    def set_quick_number(self, enabled: bool) -> None:
+        self.preferences.set("quick_print_without_cheque_number", enabled)
+        self.refresh_quick_print_mode()
 
     def select_supplier(self, index: int) -> None:
         supplier = self.suppliers.itemData(index)
@@ -237,7 +308,7 @@ class ChequePage(QWidget):
         words = amount_to_words(self.amount.value()); first, second = split_words(words)
         return {"date": format_cheque_date(self.date.date(), self.current_template().date_style), "payee": self.payee.text().strip(),
                 "amount_words_1": first, "amount_words_2": second, "amount": f"{self.amount.value():,.2f}",
-                "account_payee": "A/C PAYEE ONLY" if self.ac_payee.isChecked() else ""}
+                "account_payee": "CROSSED" if self.ac_payee.isChecked() else ""}
 
     def refresh_preview(self) -> None:
         if hasattr(self, "canvas"):
@@ -255,7 +326,7 @@ class ChequePage(QWidget):
             self.store.rename_save(original_name, template); self.reload_templates(); self.templates.setCurrentText(template.name); self.refresh_preview()
 
     def add_template(self) -> None:
-        template = ChequeTemplate.default("New Bank")
+        template = self.store.commercial_base("New Bank")
         dialog = TemplateDialog(template, self)
         if dialog.exec():
             result = dialog.result_template()
@@ -270,9 +341,14 @@ class ChequePage(QWidget):
         self.store.delete(name); self.reload_templates(); self.refresh_preview()
 
     def _printer(self) -> QPrinter:
-        printer = QPrinter(QPrinter.HighResolution); template = self.current_template(); printer.setFullPage(True)
-        printer.setPageSize(QPageSize(QSizeF(template.width_mm, template.height_mm), QPageSize.Millimeter, template.name))
-        printer.setPageMargins(QMarginsF(0, 0, 0, 0), QPageLayout.Millimeter); return printer
+        printer = QPrinter(QPrinter.HighResolution); self._apply_page_size(printer); return printer
+
+    def _apply_page_size(self, printer: QPrinter) -> None:
+        template = self.current_template(); printer.setFullPage(True)
+        width, height = template.width_mm, template.height_mm
+        if template.rotation_degrees % 360 in (90, 270): width, height = height, width
+        printer.setPageSize(QPageSize(QSizeF(width, height), QPageSize.Millimeter, template.name))
+        printer.setPageMargins(QMarginsF(0, 0, 0, 0), QPageLayout.Millimeter)
 
     def _print_error(self) -> None:
         QMessageBox.critical(self, "Printing Error", "Windows could not start this print job. Check that a printer is installed and online, then try again.")
@@ -306,10 +382,13 @@ class ChequePage(QWidget):
         if not printer.isValid(): self._print_error(); return
         dialog = QPrintDialog(printer, self)
         if dialog.exec():
+            # Some Windows drivers replace the application custom size when the dialog closes.
+            # Reapply the exact cheque size before starting the physical print job.
+            self._apply_page_size(printer)
             calibration=self.calibrations.get(printer.printerName()); self.canvas.print_offset=(calibration.x_offset_mm,calibration.y_offset_mm)
             if not self.canvas.print_to(printer): self._print_error(); return
             account=self.account.currentText() if self.account.currentData() else "";payment_type="A/C Payee" if self.ac_mode.isChecked() else "Cash / Bearer";self.history.record(self.current_template().name,self.payee.text().strip(),self.amount.value(),self.date.date().toString("yyyy-MM-dd"),self.cheque_number.text().strip(),account,self.profile.load().user_name,payment_type)
-            if account:self.accounts.use_cheque(account);self.reload_accounts()
+            if account and not self.preferences.get_bool("quick_print_without_cheque_number"):self.accounts.use_cheque(account);self.reload_accounts()
             LOGGER.info("Cheque printed using template %s", self.current_template().name)
             QMessageBox.information(self, "Cheque Printed", "The cheque was sent to the printer.")
 
